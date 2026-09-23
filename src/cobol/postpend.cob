@@ -221,6 +221,8 @@
                        IF ACCT-BAL < PEND-AMT
       * Share and draft may not go below zero. Courtesy
       * pay accepted by the teller is rejected here.
+      * A type L loan payment is this same WDL. The test
+      * rejects a payment larger than the amount owed.
                            MOVE "NSF REJECTED BY BATCH" TO WS-MSG
                            PERFORM QUEUE-REJECT
                        ELSE

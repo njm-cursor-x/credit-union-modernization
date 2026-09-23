@@ -15,7 +15,7 @@
        DATA DIVISION.
        FILE SECTION.
        FD MEMBER-FILE.
-       01 MEMBER-REC PIC X(110).
+       01 MEMBER-REC PIC X(150).
        FD ACCOUNT-FILE.
        01 ACCOUNT-REC PIC X(33).
        FD TXN-FILE.
@@ -68,7 +68,7 @@
                END-PERFORM
                CLOSE MEMBER-FILE.
        PRINT-HEAD.
-               DISPLAY "LEGACY CREDIT UNION"
+               DISPLAY "LAMEX CREDIT UNION"
                DISPLAY "MEMBER STATEMENT"
                DISPLAY " "
                MOVE SPACES TO WS-LINE
