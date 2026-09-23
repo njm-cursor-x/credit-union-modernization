@@ -1,0 +1,15 @@
+{
+  "name": "LameX Credit Union",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "install": "make",
+  "terminals": [
+    {
+      "name": "webd",
+      "command": "make serve"
+    }
+  ],
+  "ports": [8080]
+}
