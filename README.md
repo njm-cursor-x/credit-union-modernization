@@ -58,11 +58,13 @@ Elena Vasquez, member `100042`, PIN `2468`. The same credentials are printed in 
 2. The accounts page lists Regular Share `10004201`, Share Draft `10004202`, Retirement `10004203`, and Loan `10004204`, plus the last nightly posting time.
 3. Open Share Draft. The history page defaults to All years. Use the year dropdown to narrow the table. Scroll the full list.
 4. Open Regular Share and the loan and scroll their history. The loan still has a balance.
-5. Open Retirement and read the holdings table: fund, shares, price, market value, and total. Each fund name links to a month-by-month history table. The page says to call the branch. It does not place trades.
-6. Submit a transfer from Share Draft to Regular Share. The page says the transfer is scheduled. The balance does not move yet.
-7. Schedule a deposit, a withdrawal, a bill payment (electric, phone, insurance, or credit card), and a loan payment. Open Pending. The balances still have not moved.
-8. Open Profile and change the mailing address, phone, or email. Name and SSN stay as they are. Open PIN to replace the 4-digit PIN. Those two writes hit the member file immediately.
-9. Optionally run `make batch`, reload, and the pending items are in history. A loan payment reduces the amount owed. A payment larger than the loan balance is rejected by the batch.
+5. Open Retirement `10004203`. The holdings table lists VFIAX, VBTLX, VTIAX, and VMFXX with shares, the stored price, market value, and a total. Each fund name links to a month-by-month history table.
+6. Invest: in the Invest table, choose Regular Share or Share Draft, choose one fund, enter dollars, and schedule the invest. Open Pending. The instruction is listed. The balance and the shares have not moved.
+7. Exchange: in the Exchange table, choose a fund she holds, choose another fund, enter dollars, and schedule the exchange. Pending lists that instruction too.
+8. Submit a transfer from Share Draft to Regular Share. The page says the transfer is scheduled. The balance does not move yet.
+9. Schedule a deposit, a withdrawal, a bill payment (electric, phone, insurance, or credit card), and a loan payment. Open Pending. The balances still have not moved.
+10. Open Profile and change the mailing address, phone, or email. Name and SSN stay as they are. Open PIN to replace the 4-digit PIN. Those two writes hit the member file immediately.
+11. Optionally run `make batch`, reload, and the pending items are in history. Holdings show the new share counts. Transaction history shows `INVEST` or `EXCH` with the fund ids. An exchange does not take cash out of the retirement account. A loan payment reduces the amount owed. A payment larger than the loan balance is rejected by the batch. An invest or exchange the stored balance cannot cover is written to `data/reject.dat` and does not change positions.
 
 In another terminal, from the repository root:
 

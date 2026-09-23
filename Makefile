@@ -10,7 +10,7 @@ all: bin/postpend bin/postdiv bin/stmt bin/teller bin/webd
 bin:
 	mkdir -p bin
 
-bin/postpend: src/cobol/postpend.cob src/cobol/copy/account.cpy src/cobol/copy/pending.cpy src/cobol/copy/txn.cpy src/cobol/copy/reject.cpy src/cobol/copy/control.cpy | bin
+bin/postpend: src/cobol/postpend.cob src/cobol/copy/account.cpy src/cobol/copy/pending.cpy src/cobol/copy/txn.cpy src/cobol/copy/reject.cpy src/cobol/copy/control.cpy src/cobol/copy/fund.cpy src/cobol/copy/position.cpy | bin
 	$(COBC) $(COBFLAGS) -o $@ src/cobol/postpend.cob
 
 bin/postdiv: src/cobol/postdiv.cob src/cobol/copy/account.cpy src/cobol/copy/txn.cpy src/cobol/copy/control.cpy | bin

@@ -614,8 +614,8 @@ static void serve_holdings(int fd, const char* headers, const char* query) {
     page_add("<p>Retirement account ");
     page_esc(acct);
     page_add("</p>\n");
-    page_add("<p>This is a credit union retirement plan, not a brokerage account. "
-             "To change investments, call your branch. Online trading is not available.</p>\n");
+    page_add("<p>Prices are the stored NAVs. An invest or an exchange waits for the "
+             "nightly batch. Shares and balances do not change until then.</p>\n");
     page_add("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" bgcolor=\"#FFFFFF\">\n");
     page_add("<tr bgcolor=\"#000080\">");
     page_add("<td><font color=\"#FFD700\">Fund</font></td>");
@@ -679,10 +679,277 @@ static void serve_holdings(int fd, const char* headers, const char* query) {
              "Posted account balance: $");
     page_esc(money);
     page_add(".</p>\n");
-    page_add("<p>A contribution or transfer into this account increases the posted "
-             "balance when the nightly batch runs. It does not buy fund shares. "
-             "Call the branch to allocate a contribution.</p>\n");
+    page_add("<p><a href=\"/history?acct=");
+    page_esc(acct);
+    page_add("\">Transaction history</a></p>\n");
     if (rows == 0) page_add("<p>No fund positions are on file.</p>\n");
+    page_add("<h3>Invest</h3>\n");
+    page_add("<p>Move dollars from Regular Share or Share Draft into one fund. "
+             "The nightly batch buys shares at the stored NAV.</p>\n");
+    page_add("<form method=\"post\" action=\"/invest\">\n");
+    page_add("<input type=\"hidden\" name=\"retacct\" value=\"");
+    page_esc(acct);
+    page_add("\">\n");
+    page_add("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" bgcolor=\"#FFF8DC\">\n");
+    page_add("<tr><td>From</td><td><select name=\"fromacct\">\n");
+    {
+        char accts[MAX_ACCTS][ACCT_LEN + 1];
+        int na = load_accounts(accts);
+        int k;
+        int cash_n = 0;
+        if (na > 0) {
+            for (k = 0; k < na; k++) {
+                char anum[ACCT_NUM_LEN + 1];
+                char cashm[32];
+                long bal;
+                if (!field_eq(accts[k], ACCT_MBR_OFF, ACCT_MBR_LEN, member)) continue;
+                if (accts[k][ACCT_STAT_OFF] != 'A') continue;
+                if (accts[k][ACCT_TYPE_OFF] != 'S' && accts[k][ACCT_TYPE_OFF] != 'D') continue;
+                cash_n = 1;
+                field_copy(accts[k], ACCT_NUM_OFF, ACCT_NUM_LEN, anum);
+                bal = field_amount(accts[k], ACCT_BAL_OFF, ACCT_BAL_LEN);
+                format_money(cashm, bal);
+                page_add("<option value=\"");
+                page_esc(anum);
+                page_add("\">");
+                page_esc(acct_type_name(accts[k][ACCT_TYPE_OFF]));
+                page_add(" ");
+                page_esc(anum);
+                page_add(" $");
+                page_esc(cashm);
+                page_add("</option>\n");
+            }
+        }
+        if (!cash_n) page_add("<option value=\"\">No share account</option>\n");
+    }
+    page_add("</select></td></tr>\n");
+    page_add("<tr><td>Fund</td><td><select name=\"fund\">\n");
+    if (nf > 0) {
+        for (j = 0; j < nf; j++) {
+            char fund_id[8];
+            char fname[FUND_NAME_LEN + 1];
+            field_copy(funds[j], FUND_ID_OFF, FUND_ID_LEN, fund_id);
+            field_copy(funds[j], FUND_NAME_OFF, FUND_NAME_LEN, fname);
+            page_add("<option value=\"");
+            page_esc(fund_id);
+            page_add("\">");
+            page_esc(fund_id);
+            page_add(" ");
+            page_esc(fname);
+            page_add("</option>\n");
+        }
+    } else {
+        page_add("<option value=\"\">No fund</option>\n");
+    }
+    page_add("</select></td></tr>\n");
+    page_add("<tr><td>Amount</td><td>"
+             "<input type=\"text\" name=\"amount\" size=\"12\" maxlength=\"12\"></td></tr>\n");
+    page_add("<tr><td></td><td><input type=\"submit\" value=\"Schedule invest\"></td></tr>\n");
+    page_add("</table></form>\n");
+    page_add("<h3>Exchange</h3>\n");
+    page_add("<p>Move a dollar amount from one fund you hold into another. "
+             "Cash does not leave this retirement account.</p>\n");
+    page_add("<form method=\"post\" action=\"/exchange\">\n");
+    page_add("<input type=\"hidden\" name=\"retacct\" value=\"");
+    page_esc(acct);
+    page_add("\">\n");
+    page_add("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" bgcolor=\"#FFF8DC\">\n");
+    page_add("<tr><td>From fund</td><td><select name=\"fromfund\">\n");
+    {
+        int held_n = 0;
+        if (np > 0) {
+            for (i = 0; i < np; i++) {
+                char fund_id[8];
+                char shbuf[32];
+                long sh;
+                if (!field_eq(pos[i], POS_ACCT_OFF, POS_ACCT_LEN, acct)) continue;
+                sh = field_amount(pos[i], POS_SHARES_OFF, POS_SHARES_LEN);
+                if (sh <= 0) continue;
+                held_n = 1;
+                field_copy(pos[i], POS_FUND_OFF, POS_FUND_LEN, fund_id);
+                format_shares(shbuf, sh);
+                page_add("<option value=\"");
+                page_esc(fund_id);
+                page_add("\">");
+                page_esc(fund_id);
+                page_add(" ");
+                page_esc(shbuf);
+                page_add(" shares</option>\n");
+            }
+        }
+        if (!held_n) page_add("<option value=\"\">No fund</option>\n");
+    }
+    page_add("</select></td></tr>\n");
+    page_add("<tr><td>To fund</td><td><select name=\"tofund\">\n");
+    if (nf > 0) {
+        for (j = 0; j < nf; j++) {
+            char fund_id[8];
+            char fname[FUND_NAME_LEN + 1];
+            field_copy(funds[j], FUND_ID_OFF, FUND_ID_LEN, fund_id);
+            field_copy(funds[j], FUND_NAME_OFF, FUND_NAME_LEN, fname);
+            page_add("<option value=\"");
+            page_esc(fund_id);
+            page_add("\">");
+            page_esc(fund_id);
+            page_add(" ");
+            page_esc(fname);
+            page_add("</option>\n");
+        }
+    } else {
+        page_add("<option value=\"\">No fund</option>\n");
+    }
+    page_add("</select></td></tr>\n");
+    page_add("<tr><td>Amount</td><td>"
+             "<input type=\"text\" name=\"amount\" size=\"12\" maxlength=\"12\"></td></tr>\n");
+    page_add("<tr><td></td><td><input type=\"submit\" value=\"Schedule exchange\"></td></tr>\n");
+    page_add("</table></form>\n");
+    page_close();
+    html_page(fd);
+}
+
+/* Pending has no fund columns. INV stores the fund id in the description.
+   XCH stores the source fund in the first 5 characters and the destination
+   fund in the next 5. */
+static int known_fund(const char* id) {
+    char funds[MAX_FUNDS][FUND_LEN + 1];
+    int n;
+    int i;
+    if (!id || (int)strlen(id) != FUND_ID_LEN) return 0;
+    n = read_records(PATH_FUNDS, &funds[0][0], FUND_LEN, FUND_LEN + 1, MAX_FUNDS);
+    if (n < 0) return 0;
+    for (i = 0; i < n; i++) {
+        if (field_eq(funds[i], FUND_ID_OFF, FUND_ID_LEN, id)) return 1;
+    }
+    return 0;
+}
+
+static void copy_fund_token(const char* src, char* dest) {
+    int i;
+    int n = 0;
+    dest[0] = 0;
+    if (!src) return;
+    for (i = 0; i < FUND_ID_LEN; i++) {
+        char c = src[i];
+        if (c == 0 || c == ' ') break;
+        dest[n++] = c;
+    }
+    dest[n] = 0;
+}
+
+static void serve_invest_post(int fd, const char* headers, const char* body) {
+    char member[8];
+    char mrec[MBR_LEN + 1];
+    char from_acct[16];
+    char retacct[16];
+    char fund[16];
+    char amount[32];
+    char from_rec[ACCT_LEN + 1];
+    char ret_rec[ACCT_LEN + 1];
+    long cents = 0;
+    if (!require_member(fd, headers, member, mrec)) return;
+    form_get(body, "fromacct", from_acct, (int)sizeof from_acct);
+    form_get(body, "retacct", retacct, (int)sizeof retacct);
+    form_get(body, "fund", fund, (int)sizeof fund);
+    form_get(body, "amount", amount, (int)sizeof amount);
+    page_open("Invest scheduled");
+    page_add("<h2>Invest</h2>\n");
+    nav_bar();
+    if (member_owns(member, from_acct, from_rec) != 1 ||
+        member_owns(member, retacct, ret_rec) != 1 ||
+        ret_rec[ACCT_TYPE_OFF] != 'R' ||
+        (from_rec[ACCT_TYPE_OFF] != 'S' && from_rec[ACCT_TYPE_OFF] != 'D')) {
+        page_add("<p>Invest from Regular Share or Share Draft into a retirement "
+                 "account on this membership.</p>\n");
+        page_close();
+        html_page(fd);
+        return;
+    }
+    if (!known_fund(fund) || dollars_to_cents(amount, &cents) != 0 || cents <= 0) {
+        page_add("<p>Choose a fund and an amount greater than zero.</p>\n");
+        page_close();
+        html_page(fd);
+        return;
+    }
+    if (append_pending('W', "0000", "INV", from_acct, retacct, cents, fund) != 0) {
+        page_add("<p>The invest could not be recorded. Please call the branch.</p>\n");
+        page_close();
+        html_page(fd);
+        return;
+    }
+    page_add("<p>Your invest has been scheduled. It will post with the nightly batch. "
+             "Your balance and your shares have not changed. "
+             "<a href=\"/pending\">Pending activity</a> lists this instruction.</p>\n");
+    page_add("<table border=\"1\" cellpadding=\"4\" bgcolor=\"#FFFFFF\">\n<tr><td>From</td><td>");
+    page_esc(from_acct);
+    page_add("</td></tr><tr><td>Retirement</td><td>");
+    page_esc(retacct);
+    page_add("</td></tr><tr><td>Fund</td><td>");
+    page_esc(fund);
+    page_add("</td></tr><tr><td>Amount</td><td>$");
+    page_esc(amount);
+    page_add("</td></tr><tr><td>Description</td><td>INVEST ");
+    page_esc(fund);
+    page_add("</td></tr></table>\n");
+    page_close();
+    html_page(fd);
+}
+
+static void serve_exchange_post(int fd, const char* headers, const char* body) {
+    char member[8];
+    char mrec[MBR_LEN + 1];
+    char retacct[16];
+    char fromfund[16];
+    char tofund[16];
+    char amount[32];
+    char packed[16];
+    char ret_rec[ACCT_LEN + 1];
+    long cents = 0;
+    if (!require_member(fd, headers, member, mrec)) return;
+    form_get(body, "retacct", retacct, (int)sizeof retacct);
+    form_get(body, "fromfund", fromfund, (int)sizeof fromfund);
+    form_get(body, "tofund", tofund, (int)sizeof tofund);
+    form_get(body, "amount", amount, (int)sizeof amount);
+    page_open("Exchange scheduled");
+    page_add("<h2>Exchange</h2>\n");
+    nav_bar();
+    if (member_owns(member, retacct, ret_rec) != 1 || ret_rec[ACCT_TYPE_OFF] != 'R') {
+        page_add("<p>Choose a retirement account on this membership.</p>\n");
+        page_close();
+        html_page(fd);
+        return;
+    }
+    if (!known_fund(fromfund) || !known_fund(tofund) || strcmp(fromfund, tofund) == 0 ||
+        dollars_to_cents(amount, &cents) != 0 || cents <= 0) {
+        page_add("<p>Choose two different funds and an amount greater than zero.</p>\n");
+        page_close();
+        html_page(fd);
+        return;
+    }
+    memset(packed, 0, sizeof packed);
+    memcpy(packed, fromfund, FUND_ID_LEN);
+    memcpy(packed + FUND_ID_LEN, tofund, FUND_ID_LEN);
+    if (append_pending('W', "0000", "XCH", retacct, "", cents, packed) != 0) {
+        page_add("<p>The exchange could not be recorded. Please call the branch.</p>\n");
+        page_close();
+        html_page(fd);
+        return;
+    }
+    page_add("<p>Your exchange has been scheduled. It will post with the nightly batch. "
+             "Cash does not leave the retirement account. Shares have not moved. "
+             "<a href=\"/pending\">Pending activity</a> lists this instruction.</p>\n");
+    page_add("<table border=\"1\" cellpadding=\"4\" bgcolor=\"#FFFFFF\">\n<tr><td>Retirement</td><td>");
+    page_esc(retacct);
+    page_add("</td></tr><tr><td>From fund</td><td>");
+    page_esc(fromfund);
+    page_add("</td></tr><tr><td>To fund</td><td>");
+    page_esc(tofund);
+    page_add("</td></tr><tr><td>Amount</td><td>$");
+    page_esc(amount);
+    page_add("</td></tr><tr><td>Description</td><td>EXCH ");
+    page_esc(fromfund);
+    page_add(" TO ");
+    page_esc(tofund);
+    page_add("</td></tr></table>\n");
     page_close();
     html_page(fd);
 }
@@ -1223,7 +1490,9 @@ static void serve_pending(int fd, const char* headers) {
     page_add("<h2>Pending activity</h2>\n");
     nav_bar();
     page_add("<p>These items are waiting for the nightly batch. "
-             "Posted balances have not moved.</p>\n");
+             "Posted balances have not moved. An invest buys shares at the stored NAV. "
+             "An exchange moves dollars from one fund to another and does not take cash "
+             "out of the retirement account.</p>\n");
     page_add("<table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" bgcolor=\"#FFFFFF\">\n");
     page_add("<tr bgcolor=\"#000080\">");
     page_add("<td><font color=\"#FFD700\">Date</font></td>");
@@ -1258,11 +1527,37 @@ static void serve_pending(int fd, const char* headers) {
             page_add("</td><td>");
             page_esc(from_a);
             page_add("</td><td>");
-            page_esc(to_a);
+            if (strcmp(code, "XCH") == 0) {
+                char fa[8];
+                char fb[8];
+                copy_fund_token(desc, fa);
+                copy_fund_token(desc + strlen(fa), fb);
+                page_esc(fa);
+                page_add(" to ");
+                page_esc(fb);
+            } else {
+                page_esc(to_a);
+            }
             page_add("</td><td align=\"right\">$");
             page_esc(money);
             page_add("</td><td>");
-            page_esc(desc);
+            if (strcmp(code, "INV") == 0) {
+                char fa[8];
+                copy_fund_token(desc, fa);
+                page_add("INVEST ");
+                page_esc(fa);
+            } else if (strcmp(code, "XCH") == 0) {
+                char fa[8];
+                char fb[8];
+                copy_fund_token(desc, fa);
+                copy_fund_token(desc + strlen(fa), fb);
+                page_add("EXCH ");
+                page_esc(fa);
+                page_add(" TO ");
+                page_esc(fb);
+            } else {
+                page_esc(desc);
+            }
             page_add("</td></tr>\n");
         }
     }
@@ -1672,6 +1967,8 @@ static void handle_client(int fd) {
     else if (strcmp(method, "GET") == 0 && strcmp(path, "/accounts") == 0) serve_accounts(fd, headers);
     else if (strcmp(method, "GET") == 0 && strcmp(path, "/history") == 0) serve_history(fd, headers, query);
     else if (strcmp(method, "GET") == 0 && strcmp(path, "/holdings") == 0) serve_holdings(fd, headers, query);
+    else if (strcmp(method, "POST") == 0 && strcmp(path, "/invest") == 0) serve_invest_post(fd, headers, body);
+    else if (strcmp(method, "POST") == 0 && strcmp(path, "/exchange") == 0) serve_exchange_post(fd, headers, body);
     else if (strcmp(method, "GET") == 0 && strcmp(path, "/transfer") == 0) serve_transfer_form(fd, headers);
     else if (strcmp(method, "POST") == 0 && strcmp(path, "/transfer") == 0) serve_transfer_post(fd, headers, body);
     else if (strcmp(method, "GET") == 0 && strcmp(path, "/deposit") == 0) serve_deposit_form(fd, headers);
