@@ -1,0 +1,5 @@
+bin/
+webd.pid
+webd.log
+data/reject.dat
+*.o
