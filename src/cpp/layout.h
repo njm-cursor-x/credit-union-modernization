@@ -17,7 +17,8 @@ enum {
     MBR_PHONE_OFF = 93, MBR_PHONE_LEN = 12,
     MBR_STAT_OFF = 105, MBR_STAT_LEN = 1,
     MBR_PIN_OFF = 106, MBR_PIN_LEN = 4,
-    MBR_LEN = 110
+    MBR_EMAIL_OFF = 110, MBR_EMAIL_LEN = 40,
+    MBR_LEN = 150
 };
 
 enum {
@@ -62,20 +63,44 @@ enum {
 enum { CTRL_LEN = 12 };
 
 enum {
-    FUND_ID_OFF = 0, FUND_ID_LEN = 4,
-    FUND_NAME_OFF = 4, FUND_NAME_LEN = 24,
-    FUND_NAV_OFF = 28, FUND_NAV_LEN = 11,
-    FUND_ASOF_OFF = 39, FUND_ASOF_LEN = 6,
-    FUND_LEN = 45
+    FUND_ID_OFF = 0, FUND_ID_LEN = 5,
+    FUND_NAME_OFF = 5, FUND_NAME_LEN = 48,
+    FUND_NAV_OFF = 53, FUND_NAV_LEN = 11,
+    FUND_ASOF_OFF = 64, FUND_ASOF_LEN = 6,
+    FUND_LEN = 70
 };
 
 enum {
     POS_ACCT_OFF = 0, POS_ACCT_LEN = 8,
-    POS_FUND_OFF = 8, POS_FUND_LEN = 4,
-    POS_SHARES_OFF = 12, POS_SHARES_LEN = 11,
-    POS_LEN = 23,
+    POS_FUND_OFF = 8, POS_FUND_LEN = 5,
+    POS_SHARES_OFF = 13, POS_SHARES_LEN = 11,
+    POS_LEN = 24,
     /* shares are 9(7)V9(4): raw integer / POS_SHARES_SCALE */
     POS_SHARES_SCALE = 10000
+};
+
+enum {
+    NAVH_FUND_OFF = 0, NAVH_FUND_LEN = 5,
+    NAVH_DATE_OFF = 5, NAVH_DATE_LEN = 6,
+    NAVH_NAV_OFF = 11, NAVH_NAV_LEN = 11,
+    NAVH_LEN = 22
+};
+
+enum {
+    VALH_ACCT_OFF = 0, VALH_ACCT_LEN = 8,
+    VALH_FUND_OFF = 8, VALH_FUND_LEN = 5,
+    VALH_DATE_OFF = 13, VALH_DATE_LEN = 6,
+    VALH_SHARES_OFF = 19, VALH_SHARES_LEN = 11,
+    VALH_VALUE_OFF = 30, VALH_VALUE_LEN = 11,
+    VALH_LEN = 41
+};
+
+enum {
+    PAYEE_ID_OFF = 0, PAYEE_ID_LEN = 4,
+    PAYEE_MBR_OFF = 4, PAYEE_MBR_LEN = 6,
+    PAYEE_NAME_OFF = 10, PAYEE_NAME_LEN = 20,
+    PAYEE_DESC_OFF = 30, PAYEE_DESC_LEN = 24,
+    PAYEE_LEN = 54
 };
 
 enum { REJ_LEN = 105, REJ_REASON_LEN = 40 };
@@ -89,13 +114,19 @@ static const char PATH_CONTROL[] = "data/control.dat";
 static const char PATH_REJECT[] = "data/reject.dat";
 static const char PATH_FUNDS[] = "data/funds.dat";
 static const char PATH_POSITIONS[] = "data/positions.dat";
+static const char PATH_NAVHIST[] = "data/navhist.dat";
+static const char PATH_VALUEHIST[] = "data/valuehist.dat";
+static const char PATH_PAYEES[] = "data/payees.dat";
 
-typedef char mbr_len_ok[(MBR_LEN == 110) ? 1 : -1];
+typedef char mbr_len_ok[(MBR_LEN == 150) ? 1 : -1];
 typedef char acct_len_ok[(ACCT_LEN == 33) ? 1 : -1];
 typedef char txn_len_ok[(TXN_LEN == 56) ? 1 : -1];
 typedef char pend_len_ok[(PEND_LEN == 65) ? 1 : -1];
-typedef char fund_len_ok[(FUND_LEN == 45) ? 1 : -1];
-typedef char pos_len_ok[(POS_LEN == 23) ? 1 : -1];
+typedef char fund_len_ok[(FUND_LEN == 70) ? 1 : -1];
+typedef char pos_len_ok[(POS_LEN == 24) ? 1 : -1];
+typedef char navh_len_ok[(NAVH_LEN == 22) ? 1 : -1];
+typedef char valh_len_ok[(VALH_LEN == 41) ? 1 : -1];
+typedef char payee_len_ok[(PAYEE_LEN == 54) ? 1 : -1];
 
 static void put_text(char* rec, int off, int len, const char* val) {
     int i;

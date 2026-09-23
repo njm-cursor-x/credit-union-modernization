@@ -1,4 +1,4 @@
-This repository is the legacy credit union, and starting it is not a modernization.
+This repository is LameX Credit Union, and starting it is not a modernization.
 
 You run it on your own machine. Paths are relative to the repository root. There are no environment variables and no database. The site listens on `127.0.0.1:8080`.
 
@@ -55,11 +55,14 @@ The response is the HomeBanking sign-on page and includes member `100042`.
 Elena Vasquez, member `100042`, PIN `2468`. The same credentials are printed in the Demonstration access box on the sign-on page.
 
 1. Open `http://127.0.0.1:8080/` and sign on as Elena.
-2. The accounts page lists Regular Share `10004201`, Share Draft `10004202`, and Retirement `10004203`, plus the last nightly posting time.
-3. Open Regular Share and Share Draft and scroll the transaction list.
-4. Open Retirement and read the holdings table: fund, shares, price, market value, and total. The page says to call the branch. It does not place trades.
-5. Submit a transfer from Share Draft to Regular Share. The page says the transfer is scheduled. The balance does not move yet.
-6. Optionally run `make batch`, reload, and the transfer is in history.
+2. The accounts page lists Regular Share `10004201`, Share Draft `10004202`, Retirement `10004203`, and Loan `10004204`, plus the last nightly posting time.
+3. Open Share Draft. The history page defaults to All years. Use the year dropdown to narrow the table. Scroll the full list.
+4. Open Regular Share and the loan and scroll their history. The loan still has a balance.
+5. Open Retirement and read the holdings table: fund, shares, price, market value, and total. Each fund name links to a month-by-month history table. The page says to call the branch. It does not place trades.
+6. Submit a transfer from Share Draft to Regular Share. The page says the transfer is scheduled. The balance does not move yet.
+7. Schedule a deposit, a withdrawal, a bill payment (electric, phone, insurance, or credit card), and a loan payment. Open Pending. The balances still have not moved.
+8. Open Profile and change the mailing address, phone, or email. Name and SSN stay as they are. Open PIN to replace the 4-digit PIN. Those two writes hit the member file immediately.
+9. Optionally run `make batch`, reload, and the pending items are in history. A loan payment reduces the amount owed. A payment larger than the loan balance is rejected by the batch.
 
 In another terminal, from the repository root:
 
@@ -83,6 +86,8 @@ make stop
 
 ## Data
 
-Member, account, transaction, pending, teller, control, fund, and position files live in `data/`. The C++ programs and the COBOL programs both read those paths from the repository root. Do not point them at a database.
+Member, account, transaction, pending, teller, control, fund, position, NAV history, value history, and payee files live in `data/`. The C++ programs and the COBOL programs both read those paths from the repository root. Do not point them at a database.
+
+`src/cpp/seedhist.cpp` is the program that wrote Elena's ten-year history and the retirement files. `make` does not run it. The generated files are already in `data/`.
 
 What is old, and would be replaced in a later modernization, is listed in [docs/modernization-backlog.md](docs/modernization-backlog.md).
