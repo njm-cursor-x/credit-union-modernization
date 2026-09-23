@@ -16,9 +16,9 @@ This is an inventory of what is old at LameX Credit Union. Each item names the f
 
 7. Retirement prices live in a flat file. `data/funds.dat` holds the fund id, name, NAV, and as-of date. `data/navhist.dat` and `data/valuehist.dat` hold ten years of monthly NAV and market value beside it. Nothing reprices those rows. Someone at the credit union edits the files.
 
-8. No online trading. The holdings page served by `src/cpp/webd.cpp` lists fund, shares, price, and market value, then tells the member to call the branch. The site cannot place a trade.
+8. Online trades post against stored NAVs. The holdings page in `src/cpp/webd.cpp` schedules an invest or an exchange on `data/pending.dat`. `src/cobol/postpend.cob` prices the trade from the NAV in `data/funds.dat`, updates `data/positions.dat`, and appends a posted transaction. The price is that stored NAV.
 
-9. Contributions do not buy shares. `src/cobol/postpend.cob` increases the retirement cash balance when a transfer or deposit posts into a type `R` account. It does not update `data/positions.dat`, so the posted balance and the holdings total can diverge after a contribution.
+9. A plain transfer or deposit into a type `R` account still only changes the cash balance. It does not buy shares. An invest is the instruction that reduces Regular Share or Share Draft and increases `data/positions.dat`. An exchange moves shares between funds and does not take cash out of the retirement account.
 
 10. Unsigned session cookie. `src/cpp/webd.cpp` stores the member number in the cookie `LameXMember` with no signature and no expiry. The browser that presents the cookie is that member.
 

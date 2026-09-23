@@ -18,6 +18,12 @@
            SELECT CONTROL-FILE ASSIGN TO "data/control.dat"
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-CTRL-FS.
+           SELECT FUND-FILE ASSIGN TO "data/funds.dat"
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-FUND-FS.
+           SELECT POSITION-FILE ASSIGN TO "data/positions.dat"
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-POS-FS.
        DATA DIVISION.
        FILE SECTION.
        FD ACCOUNT-FILE.
@@ -30,12 +36,18 @@
        01 REJECT-REC PIC X(105).
        FD CONTROL-FILE.
        01 CONTROL-REC PIC X(12).
+       FD FUND-FILE.
+       01 FUND-REC PIC X(70).
+       FD POSITION-FILE.
+       01 POSITION-REC PIC X(24).
        WORKING-STORAGE SECTION.
        01 WS-ACCT-FS PIC XX.
        01 WS-TXN-FS PIC XX.
        01 WS-PEND-FS PIC XX.
        01 WS-REJ-FS PIC XX.
        01 WS-CTRL-FS PIC XX.
+       01 WS-FUND-FS PIC XX.
+       01 WS-POS-FS PIC XX.
        01 WS-EOF PIC X VALUE "N".
        01 WS-FOUND PIC X VALUE "N".
        01 WS-FROM-OK PIC X VALUE "N".
@@ -49,9 +61,33 @@
        01 WS-IDX PIC 9(4) VALUE 0.
        01 WS-FROM-IDX PIC 9(4) VALUE 0.
        01 WS-TO-IDX PIC 9(4) VALUE 0.
+       01 WS-POS-IDX PIC 9(4) VALUE 0.
+       01 WS-DST-IDX PIC 9(4) VALUE 0.
+       01 WS-FUND-COUNT PIC 9(4) VALUE 0.
+       01 WS-POS-COUNT PIC 9(4) VALUE 0.
+       01 WS-J PIC 9(4) VALUE 0.
        01 WS-MAX-SEQ PIC 9(6) VALUE 0.
        01 WS-KEY PIC X(8).
        01 WS-AMT PIC 9(9)V99 VALUE 0.
+       01 WS-POS-DIRTY PIC X VALUE "N".
+       01 WS-CALC-OK PIC X VALUE "N".
+       01 WS-POS-NEW PIC X VALUE "N".
+       01 WS-MBR-A PIC X(6).
+       01 WS-MBR-B PIC X(6).
+       01 WS-FUND-ID PIC X(5).
+       01 WS-FUND-SRC PIC X(5).
+       01 WS-FUND-DST PIC X(5).
+       01 WS-POS-KEY PIC X(8).
+       01 WS-FUND-KEY PIC X(5).
+       01 WS-NAV-DIGITS PIC 9(11) VALUE 0.
+       01 WS-NAV-SCALED REDEFINES WS-NAV-DIGITS PIC 9(9)V99.
+       01 WS-AMT-DIGITS PIC 9(11) VALUE 0.
+       01 WS-AMT-SCALED REDEFINES WS-AMT-DIGITS PIC 9(9)V99.
+       01 WS-SHR-DIGITS PIC 9(11) VALUE 0.
+       01 WS-SHR-SCALED REDEFINES WS-SHR-DIGITS PIC 9(7)V9(4).
+       01 WS-SELL-DIGITS PIC 9(11) VALUE 0.
+       01 WS-BUY-DIGITS PIC 9(11) VALUE 0.
+       01 WS-PROD PIC 9(18) VALUE 0.
        01 WS-DC PIC X.
        01 WS-TXN-ACCT-ARG PIC X(8).
        01 WS-TXN-DATE-ARG PIC X(6).
@@ -70,6 +106,10 @@
                COPY "txn.cpy".
        01 REJECT-WORK.
                COPY "reject.cpy".
+       01 FUND-WORK.
+               COPY "fund.cpy".
+       01 POS-WORK.
+               COPY "position.cpy".
        01 ACCT-TABLE.
                05 ACCT-HOLD OCCURS 80 TIMES PIC X(33).
        01 PEND-TABLE.
@@ -78,9 +118,15 @@
                05 NEW-TXN OCCURS 400 TIMES PIC X(56).
        01 REJ-TABLE.
                05 REJ-HOLD OCCURS 200 TIMES PIC X(105).
+       01 FUND-TABLE.
+               05 FUND-HOLD OCCURS 16 TIMES PIC X(70).
+       01 POS-TABLE.
+               05 POS-HOLD OCCURS 80 TIMES PIC X(24).
        PROCEDURE DIVISION.
        MAIN-PARA.
                PERFORM LOAD-ACCOUNTS
+               PERFORM LOAD-FUNDS
+               PERFORM LOAD-POSITIONS
                PERFORM SCAN-TXNS
                PERFORM LOAD-PENDING
                PERFORM VARYING WS-P FROM 1 BY 1
@@ -88,6 +134,7 @@
                    PERFORM APPLY-PENDING
                END-PERFORM
                PERFORM STORE-ACCOUNTS
+               PERFORM STORE-POSITIONS
                PERFORM STORE-TXNS
                PERFORM EMPTY-PENDING
                PERFORM STORE-REJECTS
@@ -117,6 +164,49 @@
                    END-READ
                END-PERFORM
                CLOSE ACCOUNT-FILE.
+       LOAD-FUNDS.
+               OPEN INPUT FUND-FILE
+               IF WS-FUND-FS NOT = "00"
+                   DISPLAY "FUNDS OPEN " WS-FUND-FS
+                   STOP RUN RETURNING 1
+               END-IF
+               MOVE "N" TO WS-EOF
+               PERFORM UNTIL WS-EOF = "Y"
+                   READ FUND-FILE
+                       AT END
+                           MOVE "Y" TO WS-EOF
+                       NOT AT END
+                           IF WS-FUND-COUNT = 16
+                               DISPLAY "FUND TABLE FULL"
+                               STOP RUN RETURNING 1
+                           END-IF
+                           ADD 1 TO WS-FUND-COUNT
+                           MOVE FUND-REC TO FUND-HOLD (WS-FUND-COUNT)
+                   END-READ
+               END-PERFORM
+               CLOSE FUND-FILE.
+       LOAD-POSITIONS.
+               OPEN INPUT POSITION-FILE
+               IF WS-POS-FS NOT = "00"
+                   DISPLAY "POSITIONS OPEN " WS-POS-FS
+                   STOP RUN RETURNING 1
+               END-IF
+               MOVE "N" TO WS-EOF
+               PERFORM UNTIL WS-EOF = "Y"
+                   READ POSITION-FILE
+                       AT END
+                           MOVE "Y" TO WS-EOF
+                       NOT AT END
+                           IF WS-POS-COUNT = 80
+                               DISPLAY "POSITION TABLE FULL"
+                               STOP RUN RETURNING 1
+                           END-IF
+                           ADD 1 TO WS-POS-COUNT
+                           MOVE POSITION-REC TO
+                               POS-HOLD (WS-POS-COUNT)
+                   END-READ
+               END-PERFORM
+               CLOSE POSITION-FILE.
        SCAN-TXNS.
                OPEN INPUT TXN-FILE
                IF WS-TXN-FS NOT = "00"
@@ -177,6 +267,10 @@
                            PERFORM APPLY-WDL
                        WHEN "XFR"
                            PERFORM APPLY-XFR
+                       WHEN "INV"
+                           PERFORM APPLY-INV
+                       WHEN "XCH"
+                           PERFORM APPLY-XCH
                        WHEN OTHER
                            MOVE "UNKNOWN TRAN CODE" TO WS-MSG
                            PERFORM QUEUE-REJECT
@@ -193,8 +287,8 @@
                        MOVE "ACCOUNT NOT ACTIVE" TO WS-MSG
                        PERFORM QUEUE-REJECT
                    ELSE
-      * Credits, including a transfer into type R, only
-      * raise the cash balance. positions.dat is not updated.
+      * DEP and XFR still only move cash. INV and XCH
+      * are the codes that change positions.dat.
                        ADD PEND-AMT TO ACCT-BAL
                        MOVE ACCT-WORK TO ACCT-HOLD (WS-IDX)
                        MOVE "C" TO WS-DC
@@ -296,6 +390,316 @@
                ELSE
                    MOVE PEND-DESC TO WS-TXN-DESC-ARG
                END-IF.
+      * The 65-byte pending row has no fund columns. INV stores the
+      * 5-character fund id in PEND-DESC. XCH stores the source fund
+      * in columns 1-5 and the destination fund in columns 6-10.
+       APPLY-INV.
+               MOVE PEND-DESC (1:5) TO WS-FUND-ID
+               MOVE PEND-FROM TO WS-KEY
+               PERFORM LOCATE-ACCT
+               IF WS-FOUND NOT = "Y"
+                   MOVE "ACCOUNT NOT FOUND" TO WS-MSG
+                   PERFORM QUEUE-REJECT
+               ELSE
+                   MOVE WS-IDX TO WS-FROM-IDX
+                   MOVE ACCT-MBR TO WS-MBR-A
+                   IF ACCT-STATUS NOT = "A"
+                       MOVE "ACCOUNT NOT ACTIVE" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       IF ACCT-TYPE NOT = "S" AND ACCT-TYPE NOT = "D"
+                           MOVE "SOURCE NOT SHARE OR DRAFT" TO WS-MSG
+                           PERFORM QUEUE-REJECT
+                       ELSE
+                           PERFORM APPLY-INV-DEST
+                       END-IF
+                   END-IF
+               END-IF.
+       APPLY-INV-DEST.
+               MOVE PEND-TO TO WS-KEY
+               PERFORM LOCATE-ACCT
+               IF WS-FOUND NOT = "Y"
+                   MOVE "ACCOUNT NOT FOUND" TO WS-MSG
+                   PERFORM QUEUE-REJECT
+               ELSE
+                   MOVE WS-IDX TO WS-TO-IDX
+                   MOVE ACCT-MBR TO WS-MBR-B
+                   IF ACCT-STATUS NOT = "A"
+                       MOVE "ACCOUNT NOT ACTIVE" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       IF ACCT-TYPE NOT = "R"
+                           MOVE "NOT A RETIREMENT ACCT" TO WS-MSG
+                           PERFORM QUEUE-REJECT
+                       ELSE
+                           IF WS-MBR-A NOT = WS-MBR-B
+                               MOVE "MEMBERS DIFFER" TO WS-MSG
+                               PERFORM QUEUE-REJECT
+                           ELSE
+                               PERFORM APPLY-INV-FUND
+                           END-IF
+                       END-IF
+                   END-IF
+               END-IF.
+       APPLY-INV-FUND.
+               MOVE WS-FUND-ID TO WS-FUND-KEY
+               PERFORM LOCATE-FUND
+               IF WS-FOUND NOT = "Y"
+                   MOVE "FUND NOT FOUND" TO WS-MSG
+                   PERFORM QUEUE-REJECT
+               ELSE
+                   MOVE FUND-NAV TO WS-NAV-SCALED
+                   MOVE WS-AMT TO WS-AMT-SCALED
+                   PERFORM CALC-SHARES
+                   IF WS-CALC-OK NOT = "Y"
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       MOVE ACCT-HOLD (WS-FROM-IDX) TO ACCT-WORK
+                       IF ACCT-BAL < WS-AMT
+                           MOVE "NSF REJECTED BY BATCH" TO WS-MSG
+                           PERFORM QUEUE-REJECT
+                       ELSE
+                           PERFORM APPLY-INV-BODY
+                       END-IF
+                   END-IF
+               END-IF.
+       APPLY-INV-BODY.
+               MOVE PEND-TO TO WS-POS-KEY
+               MOVE WS-FUND-ID TO WS-FUND-KEY
+               PERFORM LOCATE-POS
+               IF WS-FOUND = "Y"
+                   MOVE WS-IDX TO WS-POS-IDX
+                   MOVE "N" TO WS-POS-NEW
+                   MOVE POS-SHARES TO WS-SHR-SCALED
+                   IF WS-SHR-DIGITS > 99999999999 - WS-BUY-DIGITS
+                       MOVE "SHARE COUNT OVERFLOW" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       PERFORM APPLY-INV-POST
+                   END-IF
+               ELSE
+                   IF WS-POS-COUNT = 80
+                       MOVE "POSITION TABLE FULL" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       MOVE "Y" TO WS-POS-NEW
+                       PERFORM APPLY-INV-POST
+                   END-IF
+               END-IF.
+       APPLY-INV-POST.
+               MOVE ACCT-HOLD (WS-FROM-IDX) TO ACCT-WORK
+               SUBTRACT WS-AMT FROM ACCT-BAL
+               MOVE ACCT-WORK TO ACCT-HOLD (WS-FROM-IDX)
+               MOVE ACCT-HOLD (WS-TO-IDX) TO ACCT-WORK
+               ADD WS-AMT TO ACCT-BAL
+               MOVE ACCT-WORK TO ACCT-HOLD (WS-TO-IDX)
+               IF WS-POS-NEW = "Y"
+                   ADD 1 TO WS-POS-COUNT
+                   MOVE WS-POS-COUNT TO WS-POS-IDX
+                   MOVE SPACES TO POS-WORK
+                   MOVE WS-POS-KEY TO POS-ACCT
+                   MOVE WS-FUND-KEY TO POS-FUND
+                   MOVE 0 TO POS-SHARES
+               ELSE
+                   MOVE POS-HOLD (WS-POS-IDX) TO POS-WORK
+               END-IF
+               MOVE POS-SHARES TO WS-SHR-SCALED
+               ADD WS-BUY-DIGITS TO WS-SHR-DIGITS
+               MOVE WS-SHR-SCALED TO POS-SHARES
+               MOVE POS-WORK TO POS-HOLD (WS-POS-IDX)
+               MOVE "Y" TO WS-POS-DIRTY
+               MOVE SPACES TO WS-TXN-DESC-ARG
+               STRING "INVEST " DELIMITED BY SIZE
+                   WS-FUND-ID DELIMITED BY SIZE
+                   INTO WS-TXN-DESC-ARG
+               END-STRING
+               MOVE "D" TO WS-DC
+               MOVE PEND-FROM TO WS-TXN-ACCT-ARG
+               PERFORM QUEUE-TXN
+               MOVE "C" TO WS-DC
+               MOVE PEND-TO TO WS-TXN-ACCT-ARG
+               PERFORM QUEUE-TXN.
+       APPLY-XCH.
+               MOVE PEND-DESC (1:5) TO WS-FUND-SRC
+               MOVE PEND-DESC (6:5) TO WS-FUND-DST
+               IF WS-FUND-SRC = WS-FUND-DST
+                   OR WS-FUND-SRC = SPACES
+                   OR WS-FUND-DST = SPACES
+                   MOVE "FUNDS MATCH" TO WS-MSG
+                   PERFORM QUEUE-REJECT
+               ELSE
+                   MOVE PEND-FROM TO WS-KEY
+                   PERFORM LOCATE-ACCT
+                   IF WS-FOUND NOT = "Y"
+                       MOVE "ACCOUNT NOT FOUND" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       MOVE WS-IDX TO WS-FROM-IDX
+                       IF ACCT-STATUS NOT = "A"
+                           MOVE "ACCOUNT NOT ACTIVE" TO WS-MSG
+                           PERFORM QUEUE-REJECT
+                       ELSE
+                           IF ACCT-TYPE NOT = "R"
+                               MOVE "NOT A RETIREMENT ACCT" TO WS-MSG
+                               PERFORM QUEUE-REJECT
+                           ELSE
+                               PERFORM APPLY-XCH-FUNDS
+                           END-IF
+                       END-IF
+                   END-IF
+               END-IF.
+       APPLY-XCH-FUNDS.
+               MOVE WS-FUND-SRC TO WS-FUND-KEY
+               PERFORM LOCATE-FUND
+               IF WS-FOUND NOT = "Y"
+                   MOVE "FUND NOT FOUND" TO WS-MSG
+                   PERFORM QUEUE-REJECT
+               ELSE
+                   MOVE FUND-NAV TO WS-NAV-SCALED
+                   MOVE WS-AMT TO WS-AMT-SCALED
+                   PERFORM CALC-SHARES
+                   IF WS-CALC-OK NOT = "Y"
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       MOVE WS-BUY-DIGITS TO WS-SELL-DIGITS
+                       MOVE WS-FUND-DST TO WS-FUND-KEY
+                       PERFORM LOCATE-FUND
+                       IF WS-FOUND NOT = "Y"
+                           MOVE "FUND NOT FOUND" TO WS-MSG
+                           PERFORM QUEUE-REJECT
+                       ELSE
+                           MOVE FUND-NAV TO WS-NAV-SCALED
+                           PERFORM CALC-SHARES
+                           IF WS-CALC-OK NOT = "Y"
+                               PERFORM QUEUE-REJECT
+                           ELSE
+                               PERFORM APPLY-XCH-POS
+                           END-IF
+                       END-IF
+                   END-IF
+               END-IF.
+       APPLY-XCH-POS.
+               MOVE PEND-FROM TO WS-POS-KEY
+               MOVE WS-FUND-SRC TO WS-FUND-KEY
+               PERFORM LOCATE-POS
+               IF WS-FOUND NOT = "Y"
+                   MOVE "INSUFFICIENT SHARES" TO WS-MSG
+                   PERFORM QUEUE-REJECT
+               ELSE
+                   MOVE WS-IDX TO WS-POS-IDX
+                   MOVE POS-SHARES TO WS-SHR-SCALED
+                   IF WS-SHR-DIGITS < WS-SELL-DIGITS
+                       MOVE "INSUFFICIENT SHARES" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       PERFORM APPLY-XCH-DEST
+                   END-IF
+               END-IF.
+       APPLY-XCH-DEST.
+               MOVE WS-FUND-DST TO WS-FUND-KEY
+               PERFORM LOCATE-POS
+               IF WS-FOUND = "Y"
+                   MOVE WS-IDX TO WS-DST-IDX
+                   MOVE "N" TO WS-POS-NEW
+                   MOVE POS-SHARES TO WS-SHR-SCALED
+                   IF WS-SHR-DIGITS > 99999999999 - WS-BUY-DIGITS
+                       MOVE "SHARE COUNT OVERFLOW" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       PERFORM APPLY-XCH-POST
+                   END-IF
+               ELSE
+                   IF WS-POS-COUNT = 80
+                       MOVE "POSITION TABLE FULL" TO WS-MSG
+                       PERFORM QUEUE-REJECT
+                   ELSE
+                       MOVE "Y" TO WS-POS-NEW
+                       PERFORM APPLY-XCH-POST
+                   END-IF
+               END-IF.
+       APPLY-XCH-POST.
+               MOVE POS-HOLD (WS-POS-IDX) TO POS-WORK
+               MOVE POS-SHARES TO WS-SHR-SCALED
+               SUBTRACT WS-SELL-DIGITS FROM WS-SHR-DIGITS
+               MOVE WS-SHR-SCALED TO POS-SHARES
+               MOVE POS-WORK TO POS-HOLD (WS-POS-IDX)
+               IF WS-POS-NEW = "Y"
+                   ADD 1 TO WS-POS-COUNT
+                   MOVE WS-POS-COUNT TO WS-DST-IDX
+                   MOVE SPACES TO POS-WORK
+                   MOVE PEND-FROM TO POS-ACCT
+                   MOVE WS-FUND-DST TO POS-FUND
+                   MOVE 0 TO POS-SHARES
+               ELSE
+                   MOVE POS-HOLD (WS-DST-IDX) TO POS-WORK
+               END-IF
+               MOVE POS-SHARES TO WS-SHR-SCALED
+               ADD WS-BUY-DIGITS TO WS-SHR-DIGITS
+               MOVE WS-SHR-SCALED TO POS-SHARES
+               MOVE POS-WORK TO POS-HOLD (WS-DST-IDX)
+               MOVE "Y" TO WS-POS-DIRTY
+               MOVE SPACES TO WS-TXN-DESC-ARG
+               STRING "EXCH " DELIMITED BY SIZE
+                   WS-FUND-SRC DELIMITED BY SIZE
+                   " TO " DELIMITED BY SIZE
+                   WS-FUND-DST DELIMITED BY SIZE
+                   INTO WS-TXN-DESC-ARG
+               END-STRING
+               MOVE "D" TO WS-DC
+               MOVE PEND-FROM TO WS-TXN-ACCT-ARG
+               PERFORM QUEUE-TXN
+               MOVE "C" TO WS-DC
+               PERFORM QUEUE-TXN.
+       CALC-SHARES.
+               MOVE "Y" TO WS-CALC-OK
+               MOVE 0 TO WS-BUY-DIGITS
+               IF WS-NAV-DIGITS = 0
+                   MOVE "N" TO WS-CALC-OK
+                   MOVE "NAV IS ZERO" TO WS-MSG
+               ELSE
+                   COMPUTE WS-PROD = WS-AMT-DIGITS * 10000
+                       ON SIZE ERROR
+                           MOVE "N" TO WS-CALC-OK
+                           MOVE "SHARE COUNT OVERFLOW" TO WS-MSG
+                   END-COMPUTE
+                   IF WS-CALC-OK = "Y"
+                       DIVIDE WS-NAV-DIGITS INTO WS-PROD
+                           GIVING WS-BUY-DIGITS
+                           ON SIZE ERROR
+                               MOVE "N" TO WS-CALC-OK
+                               MOVE "SHARE COUNT OVERFLOW" TO WS-MSG
+                       END-DIVIDE
+                   END-IF
+                   IF WS-CALC-OK = "Y" AND WS-BUY-DIGITS = 0
+                       MOVE "N" TO WS-CALC-OK
+                       MOVE "AMOUNT TOO SMALL" TO WS-MSG
+                   END-IF
+               END-IF.
+       LOCATE-FUND.
+               MOVE "N" TO WS-FOUND
+               MOVE 0 TO WS-IDX
+               PERFORM VARYING WS-J FROM 1 BY 1
+                   UNTIL WS-J > WS-FUND-COUNT
+                   OR WS-FOUND = "Y"
+                   MOVE FUND-HOLD (WS-J) TO FUND-WORK
+                   IF FUND-ID = WS-FUND-KEY
+                       MOVE "Y" TO WS-FOUND
+                       MOVE WS-J TO WS-IDX
+                   END-IF
+               END-PERFORM.
+       LOCATE-POS.
+               MOVE "N" TO WS-FOUND
+               MOVE 0 TO WS-IDX
+               PERFORM VARYING WS-J FROM 1 BY 1
+                   UNTIL WS-J > WS-POS-COUNT
+                   OR WS-FOUND = "Y"
+                   MOVE POS-HOLD (WS-J) TO POS-WORK
+                   IF POS-ACCT = WS-POS-KEY
+                       AND POS-FUND = WS-FUND-KEY
+                       MOVE "Y" TO WS-FOUND
+                       MOVE WS-J TO WS-IDX
+                   END-IF
+               END-PERFORM.
        LOCATE-ACCT.
                MOVE "N" TO WS-FOUND
                MOVE 0 TO WS-IDX
@@ -343,6 +747,20 @@
                    WRITE ACCOUNT-REC
                END-PERFORM
                CLOSE ACCOUNT-FILE.
+       STORE-POSITIONS.
+               IF WS-POS-DIRTY = "Y"
+                   OPEN OUTPUT POSITION-FILE
+                   IF WS-POS-FS NOT = "00"
+                       DISPLAY "POSITIONS OUT " WS-POS-FS
+                       STOP RUN RETURNING 1
+                   END-IF
+                   PERFORM VARYING WS-I FROM 1 BY 1
+                       UNTIL WS-I > WS-POS-COUNT
+                       MOVE POS-HOLD (WS-I) TO POSITION-REC
+                       WRITE POSITION-REC
+                   END-PERFORM
+                   CLOSE POSITION-FILE
+               END-IF.
        STORE-TXNS.
                IF WS-NEW-COUNT > 0
                    OPEN EXTEND TXN-FILE
